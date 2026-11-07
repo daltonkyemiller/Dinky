@@ -111,7 +111,6 @@ final class WorkspaceNumbers: WorkspaceNumbering {
         var completed = false
         for _ in 0..<50 {
             let displays = planDisplays()
-            guard !displays.isEmpty else { break }
             let occupied = occupiedSpaces(among: displays.flatMap(\.spaces))
             let before = binding
             let step = plan.step(displays, binding: binding, occupied: occupied)
@@ -178,7 +177,7 @@ final class WorkspaceNumbers: WorkspaceNumbering {
 
     /// The displays as the model last read them.
     private func planDisplays(_ model: DisplayModel) -> [PlanDisplay] {
-        model.displays.map {
+        model.managedDisplays.map {
             PlanDisplay(uuid: $0.uuid, monitor: model.monitor($0), spaces: $0.userSpaces, current: $0.currentSpaceID)
         }
     }
@@ -198,7 +197,8 @@ final class WorkspaceNumbers: WorkspaceNumbering {
         }
         if let pendingHomes { homes = pendingHomes }
         var noted: [UInt32: Int] = [:]
-        for window in model.windows.values where window.isNormal && !window.isMinimized {
+        for window in model.windows.values where window.isNormal && !window.isMinimized
+            && AppState.shared.displays.isManaged(window: window.id) {
             if let n = number(of: dinky_window_space_id(window.id)) { noted[window.id] = n }
         }
         pendingHomes = noted
@@ -211,7 +211,8 @@ final class WorkspaceNumbers: WorkspaceNumbering {
         for (id, n) in homes {
             let space = dinky_window_space_id(id)
             // A window on a full-screen Space, or gone, stays put.
-            guard let target = binding[n], space != target,
+            guard let target = binding[n], space != target, model.isManaged(window: id),
+                  let destination = model.display(containingSpace: target), model.isManaged(destination),
                   model.display(containingSpace: space)?.userSpaces.contains(space) == true else { continue }
             targets[id] = target
         }
@@ -242,7 +243,8 @@ final class WorkspaceNumbers: WorkspaceNumbering {
         let model = AppState.shared.displays
         switch action {
         case .create(let uuid):
-            let name = model.displays.first { $0.uuid == uuid }.map(displayName) ?? uuid
+            guard let display = model.managedDisplays.first(where: { $0.uuid == uuid }) else { return false }
+            let name = displayName(display)
             let space = dinky_create_space(uuid as CFString)
             guard space != 0, waitUntil(2, { model.reconcile(); return model.display(containingSpace: space) != nil }) else {
                 print("workspaces: could not create a Space on \(name)")
@@ -252,8 +254,10 @@ final class WorkspaceNumbers: WorkspaceNumbering {
             return true
 
         case .move(let from, let to):
+            guard let source = model.display(containingSpace: from), model.isManaged(source),
+                  let destination = model.display(containingSpace: to), model.isManaged(destination) else { return false }
             // Every window goes, helper windows included; only the ones `occupied` counts must arrive.
-            var ids = dinky_space_window_ids(from, true).map(\.uint32Value)
+            var ids = dinky_space_window_ids(from, true).map(\.uint32Value).filter { model.isManaged(window: $0) }
             AppState.shared.coordinator?.moveTree(from: from, to: to)
             if !ids.isEmpty, dinky_move_windows_to_space(&ids, Int32(ids.count), to) {
                 _ = waitUntil(1) { !occupied(from) }
@@ -267,6 +271,7 @@ final class WorkspaceNumbers: WorkspaceNumbering {
             return true
 
         case .remove(let space):
+            guard let owner = model.display(containingSpace: space), model.isManaged(owner) else { return false }
             // Removing the Space a display shows drops it to its first Space; leave for a workspace first.
             if let display = model.displays.first(where: { $0.currentSpaceID == space }) {
                 let previous = model.previousSpace(on: display).flatMap { display.userSpaces.contains($0) && number(of: $0) != nil ? $0 : nil }

@@ -145,6 +145,7 @@ enum Dispatcher {
         guard let space = AppState.shared.numbers.space(of: n), let display = model.display(containingSpace: space) else {
             return .error("workspace \(n) has no Space; see `dinky doctor`")
         }
+        guard model.isManaged(display) else { return .error("display is excluded") }
         // On screen and staying there; a switch still on its way is not, and takes `arrive` for when it lands.
         let showing = display.currentSpaceID == space && targetSpaceID(on: display) == space
         let elsewhere = model.focusedDisplay()?.uuid != display.uuid
@@ -239,7 +240,8 @@ enum Dispatcher {
         let model = AppState.shared.displays
         model.reconcile()
         guard wid != 0, let from = model.display(ofWindow: wid) else { return .error("no focused window") }
-        let displays = model.displays
+        let displays = model.managedDisplays
+        guard model.isManaged(window: wid) else { return .error("window is on an excluded display") }
         guard displays.count > 1, let i = displays.firstIndex(of: from) else { return .error("no other display") }
         let n = (i + (target == .next ? 1 : -1) + displays.count) % displays.count
         let to = displays[n]
@@ -254,7 +256,9 @@ enum Dispatcher {
     /// Moves a new window to the current Space of `display`, without telling the coordinator, which is holding it
     /// out of the trees. Nil once moved, else the error.
     static func adopt(_ wid: WindowID, onto display: Display) -> Reply? {
-        let from = AppState.shared.displays.display(ofWindow: wid)
+        let model = AppState.shared.displays
+        guard model.isManaged(display), model.isManaged(window: wid) else { return .error("display is excluded") }
+        let from = model.display(ofWindow: wid)
         if let error = move(wid, to: display.currentSpaceID, arriving: "display \(display.id)") { return error }
         if let from { keepOffset(of: wid, from: from, to: display) }
         return nil
@@ -266,6 +270,8 @@ enum Dispatcher {
     private static func relocate(_ wid: WindowID, to space: UInt64, on to: Display, destination: String,
                                  follow: Bool) -> Reply? {
         guard wid != 0 else { return .error("no focused window") }
+        let model = AppState.shared.displays
+        guard model.isManaged(to), model.isManaged(window: wid) else { return .error("display is excluded") }
         guard dinky_window_space_id(wid) != space else { return .ok("window \(wid) is already on \(destination)") }
         let from = AppState.shared.displays.display(ofWindow: wid)
         if let error = move(wid, to: space, arriving: destination) { return error }
@@ -288,6 +294,9 @@ enum Dispatcher {
     /// Moves a window to a Space and waits for it to arrive: the bridged move is asynchronous, and callers
     /// act on the window's new place. Nil on success, else the error to answer.
     private static func move(_ wid: WindowID, to space: UInt64, arriving destination: String) -> Reply? {
+        let model = AppState.shared.displays
+        guard model.isManaged(window: wid), let destination = model.display(containingSpace: space),
+              model.isManaged(destination) else { return .error("display is excluded or unavailable") }
         var ids = [wid]
         guard dinky_move_windows_to_space(&ids, 1, space) else { return .error("move failed") }
         guard waitUntil(0.5, { dinky_window_space_id(wid) == space }) else {

@@ -57,6 +57,7 @@ extension Coordinator {
 
 private func enqueueRule(_ command: Command, _ window: UInt32) {
     DispatchQueue.main.async {
+        guard AppState.shared.displays.isManaged(window: window) else { return }
         let reply = Dispatcher.run(command, window: window)
         if !reply.ok { fputs("rule: \(reply.text)\n", stderr) }
     }

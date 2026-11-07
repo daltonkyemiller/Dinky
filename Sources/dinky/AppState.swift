@@ -40,6 +40,7 @@ final class AppState {
     init(swipeFocus: SwipeFocus = SwipeFocus()) {
         self.swipeFocus = swipeFocus
         hotkeys.load(modes: config.modes, sides: config.modifiers)
+        hotkeys.acceptsInput = { [weak self] in self?.displays.acceptsHotkeys ?? false }
     }
 
     /// Loads `~/.config/dinky/dinky.toml`, writing the default config there first if it is missing.

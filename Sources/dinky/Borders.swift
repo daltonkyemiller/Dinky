@@ -49,7 +49,6 @@ final class BorderManager {
     }
 
     func update(config: Borders) {
-        guard config != self.config else { return }
         self.config = config
         syncAll()
     }
@@ -126,6 +125,10 @@ final class BorderManager {
     private func follow(_ ids: Set<UInt32>) {
         for id in ids {
             guard let window = model.windows[id] else { continue }
+            guard AppState.shared.displays.isManaged(window: id) else {
+                borders[id] = nil
+                continue
+            }
             if borders[id]?.follow(window) != true { sync(window) }
         }
     }
@@ -146,7 +149,7 @@ final class BorderManager {
     }
 
     private func sync(_ window: Window) {
-        guard config.enabled, window.isDocument, config.decorates(bundleID: window.bundleID) else {
+        guard AppState.shared.displays.isManaged(window: window.id), config.enabled, window.isDocument, config.decorates(bundleID: window.bundleID) else {
             borders[window.id] = nil
             return
         }

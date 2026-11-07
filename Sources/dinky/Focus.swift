@@ -60,6 +60,7 @@ func frontWindowID() -> UInt32 {
 /// no tree models (e.g. `focusOnScreen` when the coordinator is not running); a window the coordinator models is
 /// focused through `Coordinator.focus(_:)`, which also arms the grace against stale focus reads.
 func focusWindow(pid: pid_t, id: UInt32) {
+    guard AppState.shared.displays.isManaged(window: id) else { return }
     // Focus is on a window again, even when it is the one that had it before a `focus-monitor`.
     AppState.shared.displays.focusOverride = nil
     if AppState.shared.displays.display(ofWindow: id) != nil {
@@ -80,6 +81,7 @@ func focusWindow(pid: pid_t, id: UInt32) {
 /// Space. Left alone when activating Finder would bring one of its windows forward: one on screen, or one anywhere
 /// when macOS switches to a Space with the app's windows.
 func focusDesktop(of display: Display) {
+    guard AppState.shared.displays.isManaged(display) else { return }
     guard let finder = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.finder").first,
           let front = NSWorkspace.shared.frontmostApplication, front.processIdentifier != finder.processIdentifier,
           dinky_window_space_id(frontWindowID()) != display.currentSpaceID else { return }

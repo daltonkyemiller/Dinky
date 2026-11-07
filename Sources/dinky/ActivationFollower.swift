@@ -182,6 +182,9 @@ private func follow(_ pid: pid_t, name: String) {
     }).first else {
         return log("activate \(name): not followed, no display has its windows' Spaces \(windowSpaces(of: pid))")
     }
+    guard model.isManaged(display), model.isManaged(window: window) else {
+        return log("activate \(name): not followed, display is excluded")
+    }
     guard space != display.currentSpaceID,
           switchSpace(toSpaceID: space, on: display, landed: { bringForward(window, of: pid, name: name) }) else {
         return log("activate \(name): not followed, already on Space \(space)")
@@ -198,6 +201,7 @@ private func follow(_ pid: pid_t, name: String) {
 // chose: one whose window is on top there, or one picked on a Space passed on the way that also has a window here.
 // Focus the window once the display is on its Space.
 private func bringForward(_ window: UInt32, of pid: pid_t, name: String) {
+    guard AppState.shared.displays.isManaged(window: window) else { return }
     guard NSWorkspace.shared.frontmostApplication?.processIdentifier != pid || frontWindowID() != window else { return }
     log("activate \(name): brought its window forward after the switch")
     if let coordinator = AppState.shared.coordinator, coordinator.model.windows[window] != nil {

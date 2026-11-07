@@ -87,7 +87,7 @@ extension Coordinator {
     /// what changed. Nil if the window is not tiled.
     func command<T>(on id: WindowID? = nil, _ change: (inout Workspace) -> T) -> T? {
         let id = id ?? focusedWindow
-        guard let key = placements[id]?.space else { return nil }
+        guard displays.isManaged(window: id), let key = placements[id]?.space else { return nil }
         edit(key) { $0.focus(id) }
         let result = edit(key, change)
         flush()

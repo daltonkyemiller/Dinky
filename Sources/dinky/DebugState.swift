@@ -22,7 +22,7 @@ extension Coordinator {
             "enabled": enabled,
             "focused": focusedWindow,
             "displays": displays.displays.map { d in
-                ["uuid": d.uuid, "current-space": d.currentSpaceID, "spaces": d.spaces, "user-spaces": d.userSpaces,
+                ["uuid": d.uuid, "name": d.name, "managed": displays.isManaged(d), "current-space": d.currentSpaceID, "spaces": d.spaces, "user-spaces": d.userSpaces,
                  "visible-area": json(d.visibleArea)] as [String: Any]
             },
             "workspaces": Dictionary(uniqueKeysWithValues: numbers.map { ("\($0.key)", $0.value) }),

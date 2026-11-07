@@ -82,6 +82,8 @@ final class Recovery {
                 return false
             }
             let now = position(of: entry.id)
+            guard displays.isManaged(window: entry.id),
+                  displays.access.allows(frame: entry.frame, space: entry.spaceID) else { return false }
             // Already in place, possibly on a Space AX cannot reach; or a late answer from an app a try gave up on.
             if now == WindowPosition(frame: entry.frame, spaceID: entry.spaceID) { return false }
             if failed.movedByHand(entry.id, now: now) {
@@ -148,9 +150,14 @@ final class Recovery {
     private func record() {
         guard recording, let model else { return }
         let before = entries.count
-        entries = entries.filter { model.windows[$0.key]?.identity == $0.value.identity }
+        entries = entries.filter {
+            model.windows[$0.key]?.identity == $0.value.identity
+                && AppState.shared.displays.isManaged(window: $0.key)
+                && AppState.shared.displays.access.allows(frame: $0.value.frame, space: $0.value.spaceID)
+        }
         var changed = entries.count != before
-        for window in model.windows.values where window.isNormal && entries[window.id] == nil {
+        for window in model.windows.values where window.isNormal && entries[window.id] == nil
+            && AppState.shared.displays.isManaged(window: window.id) {
             entries[window.id] = Entry(id: window.id, pid: window.pid, bundleID: window.bundleID,
                                        firstSeen: window.identity.firstSeen, frame: window.frame, spaceID: window.spaceID)
             changed = true
@@ -224,6 +231,8 @@ final class Recovery {
         let displays = AppState.shared.displays
         var targets: [UInt32: UInt64] = [:]
         for entry in entries where entry.spaceID != 0 && dinky_window_space_id(entry.id) != entry.spaceID {
+            guard displays.isManaged(window: entry.id),
+                  displays.access.allows(frame: entry.frame, space: entry.spaceID) else { continue }
             var ids = [entry.id]
             if displays.display(containingSpace: entry.spaceID) == nil {
                 problems[entry.id] = .spaceGone

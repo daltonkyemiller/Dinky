@@ -17,8 +17,9 @@ extension Coordinator {
     /// Starts moving a just-classified new window to the display that had focus when it first showed, holding it
     /// out of the trees meanwhile. False if it stays where the app put it.
     func adopt(_ window: Window) -> Bool {
-        guard let target = adoptTargets.removeValue(forKey: window.id),
-              let display = displays.displays.first(where: { $0.uuid == target }),
+        guard displays.isManaged(window: window.id),
+              let target = adoptTargets.removeValue(forKey: window.id),
+              let display = displays.managedDisplays.first(where: { $0.uuid == target }),
               let current = displays.display(containingSpace: window.spaceID), current.uuid != display.uuid,
               current.userSpaces.contains(window.spaceID), display.userSpaces.contains(display.currentSpaceID)
         else { return false }
@@ -26,6 +27,10 @@ extension Coordinator {
         // Out of the event handler: the move waits for the window to arrive, and its events re-enter `track`.
         DispatchQueue.main.async { [weak self] in
             guard let self, adopting.contains(window.id) else { return }
+            guard displays.isManaged(display), displays.isManaged(window: window.id) else {
+                adopting.remove(window.id)
+                return
+            }
             let error = Dispatcher.adopt(window.id, onto: display)
             adopting.remove(window.id)
             if let error {

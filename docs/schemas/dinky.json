@@ -6,6 +6,12 @@
   "type": "object",
   "additionalProperties": false,
   "properties": {
+    "exclude-displays": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "\\S" },
+      "default": [],
+      "description": "Displays left unmanaged: main, secondary, or case-insensitive name substrings. No tiling, borders, window moves, Space management, or hotkeys while focused there."
+    },
     "start-at-login": {
       "type": "boolean",
       "default": true,

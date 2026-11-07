@@ -17,7 +17,7 @@ extension Dispatcher {
         if let id = found { return focus(window: id) }
         let model = AppState.shared.displays
         if boundaries == .allMonitorsOuterFrame, let from = model.display(ofWindow: coordinator.focusedWindow) {
-            let line = displays(inLineWith: from, direction.orientation, model.displays)
+            let line = displays(inLineWith: from, direction.orientation, model.managedDisplays)
             let index = line.firstIndex(of: from)! + (direction.isForward ? 1 : -1)
             if line.indices.contains(index) { return enter(line[index], from: direction) }
             if action == .wrapAroundAllMonitors { return enter(direction.isForward ? line[0] : line[line.count - 1], from: direction) }
@@ -40,8 +40,9 @@ extension Dispatcher {
         let model = AppState.shared.displays
         model.reconcile()
         guard let from = model.focusedDisplay() else { return .error("no display") }
-        let line = target.direction.map { displays(inLineWith: from, $0.orientation, model.displays) }
-            ?? model.displays.sorted { ($0.frame.minX, $0.frame.minY) < ($1.frame.minX, $1.frame.minY) }
+        guard model.isManaged(from) else { return .error("focused display is excluded") }
+        let line = target.direction.map { displays(inLineWith: from, $0.orientation, model.managedDisplays) }
+            ?? model.managedDisplays.sorted { ($0.frame.minX, $0.frame.minY) < ($1.frame.minX, $1.frame.minY) }
         let forward = target.direction?.isForward ?? (target == .next)
         let index = line.firstIndex(of: from)! + (forward ? 1 : -1)
         guard line.indices.contains(index) else {
@@ -68,6 +69,7 @@ extension Dispatcher {
     /// Focuses `window`, or, with none, makes `display` the focused one until a window takes focus, and takes the
     /// keyboard off any window on another Space.
     static func focus(_ display: Display, window: WindowID?) -> Reply {
+        guard AppState.shared.displays.isManaged(display) else { return .error("display is excluded") }
         if let window { return focus(window: window) }
         focusDesktop(of: display)
         let model = AppState.shared.displays
@@ -79,6 +81,7 @@ extension Dispatcher {
         guard let coordinator = AppState.shared.coordinator, let window = coordinator.model.windows[id] else {
             return .error("window \(id) is gone")
         }
+        guard AppState.shared.displays.isManaged(window: id) else { return .error("window is on an excluded display") }
         coordinator.focus(id)
         return .ok("focused window \(id) \(window.appName ?? "")")
     }
@@ -96,9 +99,9 @@ extension Dispatcher {
     private static func focusOnScreen(_ direction: Direction) -> Reply {
         let model = AppState.shared.displays
         model.reconcile()
-        guard let main = model.displays.first(where: \.isMain) ?? model.displays.first else { return .error("no display") }
+        guard let main = model.focusedDisplay(), model.isManaged(main) else { return .error("focused display is excluded or unavailable") }
         let onSpace = Set(dinky_space_window_ids(main.currentSpaceID, false).map(\.uint32Value))
-        let windows = windowList().filter { onSpace.contains($0.id) }
+        let windows = windowList().filter { onSpace.contains($0.id) && model.isManaged(window: $0.id) }
         guard let front = windows.first(where: { $0.id == frontWindowID() }) else { return .error("no focused window") }
         let from = CGPoint(x: front.frame.midX, y: front.frame.midY)
         let candidates = windows.filter { w in

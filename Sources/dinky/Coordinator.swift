@@ -91,7 +91,8 @@ final class Coordinator {
         var known = displays.displays
         displays.observe { [weak self] displays in
             guard let self else { return }
-            borders?.spacesChanged(displays.displays)
+            applier.setDisplayAccess(displays.access)
+            borders?.spacesChanged(displays.managedDisplays)
             let before = known
             known = displays.displays
             if Set(known.map(\.uuid)) != Set(before.map(\.uuid)) { snap.formUnion(workspaces.keys) }
@@ -118,7 +119,10 @@ final class Coordinator {
     }
 
     func update(config: Config) {
+        animator.cancel()
+        cancelDrag()
         self.config = config
+        applier.setDisplayAccess(displays.access)
         animator.setDuration(ms: config.animations.durationMs)
         updateBorders()
         configureWorkspaces()
@@ -133,8 +137,9 @@ final class Coordinator {
     /// and nothing follows windows as they move.
     private func updateBorders() {
         if enabled, config.borders.enabled {
-            borders = borders ?? BorderManager(config: config.borders, model: model, displays: displays.displays,
+            borders = borders ?? BorderManager(config: config.borders, model: model, displays: displays.managedDisplays,
                                                isAnimating: { [unowned self] id in animator.isAnimating(id) })
+            borders?.spacesChanged(displays.managedDisplays)
             borders?.update(config: config.borders)
         } else {
             borders = nil
@@ -348,6 +353,10 @@ final class Coordinator {
     /// Classifies a window the first time it is on screen, then keeps it in the tree of its current Space
     /// while it is shown: minimized windows, windows of hidden apps and inactive tabs read as minimized.
     func track(_ window: Window) {
+        guard displays.isManaged(window: window.id) else {
+            release(window.id)
+            return
+        }
         if placements[window.id] == nil {
             // AX only lists windows on a Space that is on screen; the rest are classified when theirs is. Off, new
             // windows are not classified at all: that runs `[[rules]]` and moves them to the focused display.
@@ -374,6 +383,20 @@ final class Coordinator {
         placements[window.id]!.space = new
     }
 
+    private func release(_ id: WindowID) {
+        if dragging == id { cancelDrag() }
+        windowIdentifiers[id] = nil
+        if let space = placements.removeValue(forKey: id)?.space { edit(space) { $0.remove(id) } }
+        attempts[id] = nil
+        adoptTargets[id] = nil
+        adopting.remove(id)
+        heldTabs[id] = nil
+        notTabs.remove(id)
+        applier.forget(id)
+        animator.forget(id)
+        frameRecovery[id] = nil
+    }
+
     func forget(_ id: WindowID) {
         windowIdentifiers[id] = nil
         attempts[id] = nil
@@ -395,7 +418,7 @@ final class Coordinator {
     /// Focuses a window, raising it and activating its app. For a moment after, focus events that still
     /// report the previous window are ignored, so they do not pull the trees back to it.
     func focus(_ id: WindowID) {
-        guard let window = model.windows[id] else { return }
+        guard displays.isManaged(window: id), let window = model.windows[id] else { return }
         focusing = (id, Date() + 0.5)
         focusWindow(pid: window.pid, id: id)
     }
@@ -419,7 +442,7 @@ final class Coordinator {
 
     /// The tree of a user Space, numbered workspace or not, created on first use. Nil for full-screen Spaces.
     private func key(of window: Window) -> UInt64? {
-        guard let display = displays.display(containingSpace: window.spaceID),
+        guard let display = displays.display(containingSpace: window.spaceID), displays.isManaged(display),
               display.userSpaces.contains(window.spaceID) else { return nil }
         let settings = settings(for: window.spaceID)
         guard settings.tiling else { return nil }
@@ -462,7 +485,7 @@ final class Coordinator {
 
     /// Whether the Space is a display's current one.
     func isVisible(_ space: UInt64) -> Bool {
-        displays.displays.contains { $0.currentSpaceID == space }
+        displays.managedDisplays.contains { $0.currentSpaceID == space }
     }
 
     /// Writes the tree's frames around the minimum sizes windows have shown, then lets the applier raise
@@ -471,7 +494,8 @@ final class Coordinator {
     /// focus it themselves, so a pass, which may have started before the latest focus change, must not.
     /// Minimum sizes found in a pass are laid out around all at once, when that moves anything.
     private func apply(_ key: UInt64) {
-        guard var workspace = workspaces[key] else { return }
+        guard let display = displays.display(containingSpace: key), displays.isManaged(display),
+              var workspace = workspaces[key] else { return }
         workspace.minimumSizes = minimumSizes(in: workspace)
         workspaces[key] = workspace
         // A window being dragged stays under the pointer: neither written back to its tile nor raised. With no

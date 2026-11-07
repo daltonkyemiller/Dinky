@@ -40,6 +40,7 @@ public struct PlanStep: Equatable {
 public struct WorkspacePlan {
     public let count: Int
     public let assignments: [Int: [MonitorPattern]]
+    public var excludeDisplays: [MonitorPattern] = []
 
     public init(count: Int, assignments: [Int: [MonitorPattern]]) {
         self.count = count
@@ -48,6 +49,7 @@ public struct WorkspacePlan {
 
     public init(_ config: Config) {
         self.init(count: config.workspaces, assignments: config.workspaceDisplays)
+        excludeDisplays = config.excludeDisplays
     }
 
     /// Workspace numbers, 1 through `count`; none when `count` is 0.
@@ -55,6 +57,7 @@ public struct WorkspacePlan {
 
     /// The display each workspace lives on: the display its first matching pattern names, else the main one.
     public func homes(_ displays: [PlanDisplay]) -> [Int: String] {
+        let displays = displays.filter { display in !excludeDisplays.contains { $0.matches(display.monitor) } }
         guard let main = displays.first(where: \.monitor.isMain) ?? displays.first else { return [:] }
         var homes: [Int: String] = [:]
         for n in numbers {
@@ -71,6 +74,7 @@ public struct WorkspacePlan {
     /// workspace is on are removed; one is kept on a display with no workspace, which macOS requires anyway.
     /// A leftover Space with windows is left alone.
     public func step(_ displays: [PlanDisplay], binding: [Int: UInt64], occupied: Set<UInt64>) -> PlanStep {
+        let displays = displays.filter { display in !excludeDisplays.contains { $0.matches(display.monitor) } }
         let all = Set(displays.flatMap(\.spaces))
         // Forget Spaces that are gone and workspaces past the count; one workspace per Space.
         var binding = binding.filter { n, space in numbers.contains(n) && all.contains(space) }
@@ -115,6 +119,9 @@ public struct WorkspacePlan {
     /// left to right. Spaces and windows stay where they are, and the numbers are back in the order `step`
     /// keeps, so it has nothing to move. A workspace off its display, or whose Space is gone, keeps its number.
     public func renumbered(_ displays: [PlanDisplay], binding: [Int: UInt64]) -> [Int: UInt64] {
+        let excludedSpaces = Set(displays.filter { display in excludeDisplays.contains { $0.matches(display.monitor) } }.flatMap(\.spaces))
+        let binding = binding.filter { !excludedSpaces.contains($0.value) }
+        let displays = displays.filter { display in !excludeDisplays.contains { $0.matches(display.monitor) } }
         let homes = homes(displays)
         var result = binding
         for display in displays {

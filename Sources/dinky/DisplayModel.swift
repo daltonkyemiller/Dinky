@@ -1,5 +1,6 @@
 import AppKit
 import DinkyPrivate
+import DinkyConfig
 
 // Fans the one process-wide WindowServer callback out to every model that wants events.
 // dinky_events_start keeps a single callback, so exactly one owner may call it: this hub.
@@ -45,6 +46,27 @@ struct Display: Equatable {
 final class DisplayModel {
     private(set) var displays: [Display] = []
     private let readSnapshot: (() -> [Display])?
+
+    var managedDisplays: [Display] { displays.filter(isManaged) }
+
+    func isManaged(_ display: Display) -> Bool {
+        let config = AppState.shared.config
+        guard config.excludeDisplays.isEmpty || !display.name.isEmpty else { return false }
+        return config.manages(monitor(display))
+    }
+
+    func isManaged(window id: UInt32) -> Bool {
+        let info = dinky_window_info(id)
+        return access.allows(frame: info.frame, space: dinky_window_space_id(id))
+    }
+
+    var access: DisplayAccess {
+        DisplayAccess(excluded: displays.filter { !isManaged($0) })
+    }
+
+    var acceptsHotkeys: Bool {
+        focusedDisplay().map(isManaged) ?? !managedDisplays.isEmpty
+    }
     /// The Space each display was on before its current one, by display UUID, for back-and-forth.
     private var previousSpaceIDs: [String: UInt64] = [:]
     /// The Space each display last settled on: a swipe passes through the Spaces between, which don't count.

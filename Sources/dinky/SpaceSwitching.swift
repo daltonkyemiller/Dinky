@@ -32,7 +32,10 @@ func targetSpaceID(on display: Display) -> UInt64 {
 // never replays obsolete swipes. Landing is observed with `dinky_current_space_id`, not assumed; a swipe
 // that has not landed after `timeout` is posted once more, then reported and dropped.
 final class SpaceSwitcher {
-    static let shared = SpaceSwitcher()
+    static let shared = SpaceSwitcher(canManage: { uuid in
+        let model = AppState.shared.displays
+        return model.displays.first(where: { $0.uuid == uuid }).map(model.isManaged) ?? false
+    })
 
     private struct Flight {
         var target: UInt64      // the newest request
@@ -48,6 +51,7 @@ final class SpaceSwitcher {
     private let swipe: (Int32, Int32, String) -> Bool
     private let clock: () -> UInt64
     private let pollAutomatically: Bool
+    private let canManage: (String) -> Bool
     private var flights: [String: Flight] = [:]
     private var timer: Timer?
     // The mimi path pumps the run loop between steps; the poll and new requests must not post meanwhile.
@@ -67,7 +71,9 @@ final class SpaceSwitcher {
              noteOwnSwitch()
              return dinky_switch_to_space_index(from, to, uuid as CFString)
          },
-         clock: @escaping () -> UInt64 = uptime, pollAutomatically: Bool = true) {
+         clock: @escaping () -> UInt64 = uptime, pollAutomatically: Bool = true,
+         canManage: @escaping (String) -> Bool = { _ in true }) {
+        self.canManage = canManage
         self.currentSpace = currentSpace
         self.spaceIDs = spaceIDs
         self.swipe = swipe
@@ -81,6 +87,7 @@ final class SpaceSwitcher {
     var switching: Bool { !flights.isEmpty }
 
     func request(_ target: UInt64, on uuid: String, landed: (() -> Void)? = nil) -> Bool {
+        guard canManage(uuid) else { return false }
         if let flight = flights[uuid] {
             flights[uuid]!.target = target
             flights[uuid]!.retried = false
@@ -99,6 +106,7 @@ final class SpaceSwitcher {
     /// Posts a swipe from the display's observed Space to the flight's target. Drops the flight if it can't.
     private func post(on uuid: String) {
         guard var flight = flights[uuid] else { return }
+        guard canManage(uuid) else { return finish(uuid, "switch: display is excluded or disconnected") }
         let spaces = spaceIDs(uuid)
         let current = currentSpace(uuid)
         guard let from = spaces.firstIndex(of: current), let to = spaces.firstIndex(of: flight.target) else {
@@ -119,6 +127,10 @@ final class SpaceSwitcher {
         // each flight is read afresh rather than from a copy taken before the loop.
         for uuid in Array(flights.keys) {
             guard let flight = flights[uuid] else { continue }
+            guard canManage(uuid) else {
+                finish(uuid, "switch: display is excluded or disconnected")
+                continue
+            }
             let observed = currentSpace(uuid)
             let ms = Double(clock() - flight.startedAt) / 1_000_000
             if flight.posted == 0 {

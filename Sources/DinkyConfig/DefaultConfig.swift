@@ -9,6 +9,7 @@ extension Config {
     # Every key and command: https://dinky.rodeo/configuration/
 
     start-at-login = true
+    exclude-displays = []          # display patterns left entirely unmanaged, e.g. ['Sill']
     workspaces = 5                  # across all displays, one native Space each
     follow-space-order = false      # true renumbers workspaces when you reorder Spaces in Mission Control
     default-layout = 'tiles'        # tiles (dwindle) | dwindle | accordion | fixed | scrolling | master

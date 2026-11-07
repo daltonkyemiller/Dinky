@@ -7,6 +7,7 @@ import TOMLDecoder
 
 public struct Config: Equatable {
     public var startAtLogin = true
+    public var excludeDisplays: [MonitorPattern] = []
     /// Workspaces across all displays, numbered from 1. Each is one native Space.
     public var workspaces = 5
     /// `[workspace-to-display]`: by workspace number, the display patterns it lives on, the first that matches
@@ -97,6 +98,11 @@ public struct Config: Equatable {
 
     init(_ t: Table) throws {
         startAtLogin = try t.bool("start-at-login") ?? startAtLogin
+        let excluded = try t.strings("exclude-displays") ?? []
+        guard !excluded.contains(where: { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) else {
+            throw ConfigError(path: "exclude-displays", "a display pattern can’t be empty")
+        }
+        excludeDisplays = excluded.map(MonitorPattern.init)
         workspaces = try t.int("workspaces") ?? workspaces
         guard workspaces >= 1 else { throw ConfigError(path: "workspaces", "must be at least 1") }
         if let assignments = try t.table("workspace-to-display") {
@@ -221,6 +227,10 @@ public struct WorkspaceOnDisplay: Equatable {
 }
 
 extension Config {
+    public func manages(_ monitor: Monitor) -> Bool {
+        !excludeDisplays.contains { $0.matches(monitor) }
+    }
+
     /// The settings of the workspace with this number, the top-level ones for an unnumbered workspace. On
     /// `monitor`, the workspace's most specific matching display table replaces them, the last of equals winning.
     public func settings(forWorkspace number: Int?, on monitor: Monitor? = nil) -> WorkspaceSettings {

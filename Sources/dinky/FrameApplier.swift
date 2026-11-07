@@ -17,6 +17,22 @@ final class FrameApplier {
     private var scheduler: FrameScheduler!
     private let lock = NSLock()
     private var elements: [Key: AXUIElement] = [:]
+    private var displayAccess = DisplayAccess()
+
+    func setDisplayAccess(_ access: DisplayAccess) {
+        let changed = lock.withLock {
+            let changed = displayAccess.excluded != access.excluded
+            displayAccess = access
+            return changed
+        }
+        if changed { scheduler.cancel() }
+    }
+
+    private func allows(_ id: WindowID) -> Bool {
+        let access = lock.withLock { displayAccess }
+        guard !access.excluded.isEmpty else { return true }
+        return access.allows(frame: dinky_window_info(id).frame, space: dinky_window_space_id(id))
+    }
     /// Windows written but not read back, already logged, so a window that stays unreadable is logged once.
     private var unreadable: Set<WindowID> = []
     /// The largest minimum size any window of an app has shown, by bundle id. Kept across sessions in
@@ -35,15 +51,17 @@ final class FrameApplier {
         try? FileManager.default.removeItem(at: supportURL.appendingPathComponent("minimum-sizes.json"))
         appMinimums = loadMinimums()
         scheduler = FrameScheduler(
-            beforeBatch: { pid in Self.suppressEnhancedUI(pid) },
+            beforeBatch: { [unowned self] pid in
+                if lock.withLock({ displayAccess.excluded.isEmpty }) { Self.suppressEnhancedUI(pid) }
+            },
             read: { [unowned self] job in withElement(pid: job.pid, id: job.id, frame) ?? nil },
             write: { [unowned self] job in
                 guard let permit = writes.permit else { return }
-                withElement(pid: job.pid, id: job.id) { write(job.frame, to: $0, permit: permit) }
+                withElement(pid: job.pid, id: job.id) { write(job.frame, to: $0, id: job.id, permit: permit) }
             },
             move: { [unowned self] job in
                 guard let permit = writes.permit else { return }
-                withElement(pid: job.pid, id: job.id) { move(job.frame.origin, to: $0, permit: permit) }
+                withElement(pid: job.pid, id: job.id) { move(job.frame.origin, to: $0, id: job.id, permit: permit) }
             }
         )
     }
@@ -229,12 +247,14 @@ final class FrameApplier {
         let key = Key(pid: pid, id: id)
         let cached = lock.withLock { elements[key] }
         guard let element = cached ?? lookUp(key) else { return nil }
+        guard allows(id) else { return nil }
         let (value, error) = body(element)
         guard error == .invalidUIElement, cached != nil else { return value }
         guard let fresh = lookUp(key) else {
             print("\(stamp()) frames: window \(id) of pid \(pid) no longer has an Accessibility element")
             return nil
         }
+        guard allows(id) else { return nil }
         return body(fresh).0
     }
 
@@ -252,19 +272,19 @@ final class FrameApplier {
 
     // Size, position, size: the first size lets a window near the screen edge move, the second
     // fixes the size if the move clamped it. Stops at an invalid element, which takes no writes.
-    private func write(_ frame: CGRect, to element: AXUIElement, permit: Int) -> AXError {
+    private func write(_ frame: CGRect, to element: AXUIElement, id: WindowID, permit: Int) -> AXError {
         var size = frame.size, origin = frame.origin
         let sizeValue = AXValueCreate(.cgSize, &size)!, originValue = AXValueCreate(.cgPoint, &origin)!
         for (attribute, value) in [(kAXSizeAttribute, sizeValue), (kAXPositionAttribute, originValue), (kAXSizeAttribute, sizeValue)] {
-            guard writes.allows(permit) else { return .success }
+            guard writes.allows(permit), allows(id) else { return .success }
             let error = AXUIElementSetAttributeValue(element, attribute as CFString, value)
             if error == .invalidUIElement { return error }
         }
         return .success
     }
 
-    private func move(_ origin: CGPoint, to element: AXUIElement, permit: Int) -> AXError {
-        guard writes.allows(permit) else { return .success }
+    private func move(_ origin: CGPoint, to element: AXUIElement, id: WindowID, permit: Int) -> AXError {
+        guard writes.allows(permit), allows(id) else { return .success }
         var origin = origin
         return AXUIElementSetAttributeValue(element, kAXPositionAttribute as CFString, AXValueCreate(.cgPoint, &origin)!)
     }

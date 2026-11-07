@@ -26,6 +26,7 @@ file is left alone, with the read error shown in the menu.
 | Key | Default | |
 |---|---|---|
 | `start-at-login` | `true` | Register as a login item. |
+| `exclude-displays` | `[]` | Displays left unmanaged, using case-insensitive name substrings or `main` / `secondary`. |
 | `workspaces` | `5` | Workspaces across all displays, one native Space each. dinky creates and removes Spaces to match. |
 | `follow-space-order` | `false` | Set `true` to renumber workspaces when you reorder Spaces in Mission Control: on each display the leftmost Space becomes its lowest-numbered workspace, and windows stay where they are. Left `false`, a workspace keeps its number, and the next arrangement (a config reload, a display change, a Space removed) moves its windows back to that number's place. |
 | `default-layout` | `'tiles'` | `'tiles'` (the existing dwindle layout), `'dwindle'`, `'accordion'`, `'fixed'`, `'scrolling'`, or `'master'`. |
@@ -44,6 +45,35 @@ Numbers are positional when following the Space order: `[workspace.2]` settings 
 or rules targeting workspace 2 apply to the newly numbered workspace 2, not to the Space
 that previously held that number. Enabling the option with `reload-config` also adopts
 the current order.
+
+## Excluded displays
+
+```toml
+exclude-displays = ['Sill']
+```
+
+An excluded display keeps its existing Spaces and windows. Dinky does not tile,
+decorate, adopt, focus, move, or restore its windows, or create, remove, number,
+or switch its Spaces. Display focus and window-move navigation skip it; explicit
+monitor-number commands targeting it return an error. Bound keys pass through
+while that display has keyboard focus, and swipe focus leaves gestures there
+to macOS. Queries still list it; `debug-state` reports `managed: false`.
+
+Exclusion wins over workspace assignments and window rules. A workspace assigned
+to an excluded display falls back to the main managed display, or the first
+managed display if the macOS main display is excluded. If all displays are
+excluded, Dinky manages no workspaces. Adding an exclusion releases windows
+where they are without restoring their old frames. Removing it allows normal
+management again. The same patterns apply when displays reconnect.
+
+A window is excluded when its current Space belongs to an excluded display or
+its frame's center lies there, so dragging it onto that display releases it.
+A display whose name is not available yet is left unmanaged while exclusions
+are configured. macOS and applications can still move windows themselves,
+including on display disconnect. A system call already in progress when a
+display is excluded may finish; queued writes and subsequent actions recheck
+exclusion. Explicit low-level `dinky debug ax-*` commands are diagnostic tools,
+not window-management commands, and still operate on the window IDs supplied.
 
 ## `[follow-app-activation]`
 

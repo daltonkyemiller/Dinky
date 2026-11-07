@@ -147,7 +147,7 @@ extension SwipeFocus.Context {
         canSuppress: { dinky_can_suppress_dock_swipe() },
         begin: { point, vertical in
             guard AppState.shared.enabled, !MissionControl.shared.active,
-                  let display = AppState.shared.displays.displays.first(where: { $0.frame.contains(point) }),
+                  let display = AppState.shared.displays.managedDisplays.first(where: { $0.frame.contains(point) }),
                   SpaceSwitcher.shared.target(on: display.uuid) == nil,
                   dinky_current_space_id(display.uuid as CFString) == display.currentSpaceID,
                   let workspace = AppState.shared.coordinator?.workspace(on: display),
@@ -155,7 +155,7 @@ extension SwipeFocus.Context {
             return .init(display: display.uuid, space: display.currentSpaceID)
         },
         snapshot: { token in
-            guard AppState.shared.displays.displays.contains(where: { $0.uuid == token.display }) else { return nil }
+            guard AppState.shared.displays.managedDisplays.contains(where: { $0.uuid == token.display }) else { return nil }
             return .init(display: token.display, space: dinky_current_space_id(token.display as CFString),
                          switching: SpaceSwitcher.shared.target(on: token.display) != nil,
                          enabled: AppState.shared.enabled, missionControl: MissionControl.shared.active)

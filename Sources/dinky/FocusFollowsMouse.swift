@@ -134,7 +134,8 @@ final class HoverFocus {
         let state = AppState.shared
         guard state.enabled, !MissionControl.shared.active,
               !CGEventSource.buttonState(.combinedSessionState, button: .left),
-              let coordinator = state.coordinator, let id = under, coordinator.placements[id] != nil,
+              let coordinator = state.coordinator, let id = under, state.displays.isManaged(window: id),
+              coordinator.placements[id] != nil,
               !SpaceSwitcher.shared.switching else { return nil }
         // A dialog, sheet or alert has keyboard focus when the front app's focused window is one dinky has not
         // placed although it is on a current Space. Hover leaves it alone: focusing another window would bury

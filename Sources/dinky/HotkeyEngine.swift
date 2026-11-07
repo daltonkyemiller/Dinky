@@ -11,6 +11,7 @@ final class HotkeyEngine {
     private var sides = ModifierSides()
     private(set) var currentMode = "main"
     var enabled = true
+    var acceptsInput: () -> Bool = { true }
     /// Called with the new mode's name and the previous one whenever the mode changes.
     var onModeChange: ((_ mode: String, _ previous: String) -> Void)?
     private var tap: CFMachPort?
@@ -60,8 +61,9 @@ final class HotkeyEngine {
     }
 
     /// The commands bound to this event in the current mode, if dinky should take it.
-    fileprivate func commands(for event: CGEvent) -> [String]? {
-        guard enabled, let press = KeyPress(event, sides: sides) else { return nil }
+    func commands(for event: CGEvent) -> [String]? {
+        guard enabled, acceptsInput(),
+              let press = KeyPress(event, sides: sides) else { return nil }
         return modes[currentMode]?[press]
     }
 
@@ -72,7 +74,10 @@ final class HotkeyEngine {
         }
         guard type == .keyDown, let commands = commands(for: event) else { return Unmanaged.passUnretained(event) }
         // Run the commands after the callback returns, so slow commands never time the tap out.
-        DispatchQueue.main.async { self.onCommands(commands) }
+        DispatchQueue.main.async {
+            guard self.acceptsInput() else { return }
+            self.onCommands(commands)
+        }
         return nil
     }
 }

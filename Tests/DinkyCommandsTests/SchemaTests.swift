@@ -48,6 +48,7 @@ struct SchemaTests {
     /// One value for every key the schema knows, table forms where a key takes a scalar or a table.
     private static let everyKey = """
         start-at-login = false
+        exclude-displays = ['Sill']
         workspaces = 4
         follow-space-order = true
         default-layout = 'accordion'
