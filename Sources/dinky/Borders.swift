@@ -54,7 +54,7 @@ final class BorderManager {
     }
 
     /// Whether a window id is one of the border windows dinky draws.
-    func isBorder(_ id: UInt32) -> Bool { borders.values.contains { $0.id == id } }
+    func isBorder(_ id: UInt32) -> Bool { borders.values.contains { $0.owns(id) } }
 
     func handle(_ event: WindowEvent) {
         switch event.kind {

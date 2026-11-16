@@ -1,5 +1,51 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+
+- Rounded window borders get a subtle 5% optical thickening at the corner midpoints, leaving straight edges, inner outlines and square corners unchanged (#77, thanks @albertomalossi).
+- `dinky doctor` points to System Settings to turn off slow Cmd-Tab Space switching, instead of onboarding's one-time step (#76, thanks @ChrisGVE).
+
+## 0.28
+
+### Fixes
+
+- Borders use a fraction of the memory: about 1.5 MB per window instead of up to 30 MB on Retina displays
+- Stop leaking memory as windows move, resize and get listed
+- Use less CPU while idle
+- A window next to one at its minimum size no longer gets squeezed to nothing and pushed off the display
+
+## 0.27
+
+### Fixes
+
+- Only redraw the menu bar icon when it changes
+
+## 0.26
+
+### Key bindings
+
+- A key binding can be a table, `{ command = 'focus left', exclude-apps = ['com.mitchellh.ghostty'] }`. While an excluded app is frontmost, dinky leaves the key to it, so terminals with their own `ctrl-hjkl` pane navigation keep it (#66, thanks @ChrisGVE).
+
+### Fixes
+
+- `list-windows` shows window titles with just the Accessibility permission, reading them as rules do; before, it needed Screen Recording, which dinky never asks for. A window on a Space not shown since dinky started can still list without a title (#70, thanks @codyo-o).
+
+## 0.25
+
+### Commands
+
+- `--window-id <id>` targets a managed window in workspace/display moves and layout commands, without focusing it first. Workspace `prev`/`next` are relative to that window. Moves keep focus here unless `--follow` shows and focuses the destination (#68, thanks @albertomalossi).
+
+### Fixes
+
+- Moving a focused floating window without `--follow` focuses a tiled window left on its source workspace, when there is one (#68, thanks @albertomalossi).
+- Finder folders opened from the Desktop tile once their opening animation finishes, instead of staying floating until dinky restarts (#67, thanks @albertomalossi).
+- Closing or minimizing the focused window no longer leaves its Space without keyboard focus: dinky focuses the workspace's next tile, so `focus` commands work without a click. A key press, click, focus command or Space switch right after the close still wins. On macOS 15 this also takes focus back when macOS hands it to the app's window on another display; on macOS 27 dinky can't tell that from a deliberate switch and leaves it (#69, thanks @ivanmilov).
+- Layout stacking no longer brings back a window you are minimizing when a slow layout pass finishes during the animation (#69).
+- `debug-state` no longer crashes dinky when a window's frame is briefly unavailable during a close or minimize (#69).
+
 ## 0.24
 
 **Upgrading scripts:** Raw socket clients must close their writing half after sending a request; a newline no longer submits it. The normal CLI and macOS `nc` already do this. The CLI now rejects replies over 1 MiB: narrow large list queries with filters or `--format`, or use a raw socket client for larger replies.

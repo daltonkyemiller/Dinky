@@ -5,8 +5,10 @@ import DinkyLayout
 // What commands ask of the coordinator: tree commands on the focused window's Space, floating, and
 // taking in a window dinky moved to another Space.
 extension Coordinator {
-    /// Whether dinky floats the window; nil for a window it has not classified.
-    func isFloating(_ id: WindowID) -> Bool? { placements[id]?.floating }
+    /// Settling windows are still floating on screen, unless a command has already requested tiling.
+    func isFloating(_ id: WindowID) -> Bool? {
+        placements[id]?.floating ?? settlements[id].map { $0.floating ?? true }
+    }
 
     /// The tree of the display's current Space, if dinky has one.
     func workspace(on display: Display) -> Workspace? {
@@ -96,9 +98,13 @@ extension Coordinator {
 
     /// Floats a tiled window where it stands, or tiles a floating one beside the focused tile of its Space.
     /// A window held as a possible tab is released, so it cannot take over a tile once floated.
-    /// False for a window dinky has not classified.
+    /// During initial classification, remember the choice until AX settles. False for an unmanaged window.
     @discardableResult
     func setFloating(_ id: WindowID, _ floating: Bool) -> Bool {
+        if let settlement = settlements[id] {
+            settlement.floating = floating
+            return true
+        }
         guard let placement = placements[id], let window = model.windows[id] else { return false }
         if let space = placement.space { edit(space) { $0.remove(id) } }
         heldTabs[id] = nil
@@ -109,16 +115,13 @@ extension Coordinator {
     }
 
     /// Moves a window dinky just moved to another Space into that Space's tree now, rather than on the next event.
-    /// macOS leaves keyboard focus with the moved window, so unless we are about to follow it, focus the window
-    /// that took its place in the tree it left.
-    func windowMoved(_ id: WindowID, refocus: Bool = true) {
+    /// `source` requests a focus handoff there. The caller captures it before moving, only for a focused window
+    /// it isn't following; remembered tree focus and tiled placement cannot tell us that for a floating window.
+    func windowMoved(_ id: WindowID, refocusFrom source: UInt64? = nil) {
         guard model.windows[id] != nil else { return }
-        // The tree's own record: by now macOS has already re-pointed the app's frontmost window elsewhere.
-        let from = placements[id]?.space
-        let hadFocus = from.flatMap { workspaces[$0]?.focused } == id
         // Re-reads its Space; the update it publishes reaches handle, which tracks the window and flushes.
         model.refresh(id)
-        guard refocus, hadFocus, let from, let successor = workspaces[from]?.focused, successor != id else { return }
+        guard let source, let successor = workspaces[source]?.focused, successor != id else { return }
         focus(successor)
     }
 }

@@ -29,4 +29,9 @@ Learn more:
 Window rules can match or exclude Accessibility identifiers to distinguish auxiliary
 windows from documents with the same title. See [window rules](https://dinky.rodeo/configuration/#rules).
 
+Window borders use a subtle 5% optical thickening at rounded corner midpoints,
+tapering back to the configured width at the straight edges.
+
+See [border development](docs/border-development.md) for the native comparison preview and regression tests.
+
 MIT licensed.

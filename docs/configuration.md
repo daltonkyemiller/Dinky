@@ -480,6 +480,12 @@ A rule that is exactly `layout floating` or `layout tiling` decides before the
 window is placed, the last one winning. Every other rule command runs once the
 window is placed, on that window.
 
+New windows that have not yet exposed their Accessibility window or resize
+capability get up to a second to settle before dinky decides. This lets Finder
+folders opened from the Desktop tile normally. Rules run once, after that wait;
+fixed-size windows still float. A `layout floating` or `layout tiling` command
+during the wait is remembered and takes precedence over the rule's layout choice.
+
 New windows open on the focused display, whichever display the app picked. A
 rule that moves the window, such as `move-window-to-workspace`, decides where
 it goes instead.
@@ -547,7 +553,15 @@ usual floating behavior.
 ## `[mode.<name>]`
 
 Key bindings. dinky starts in `main`; `mode <name>` switches. Each key maps to
-a command or a list of commands. Bound keys are swallowed.
+a command or a list of commands. Bound keys are swallowed. A key can also map
+to a table with `command` and `exclude-apps`, a list of bundle IDs: while one
+of those apps is frontmost, dinky leaves the key to it. Terminals that use
+`ctrl-hjkl` for their own panes keep it that way.
+
+```toml
+[mode.main]
+ctrl-h = { command = 'focus left --wrap-around', exclude-apps = ['com.github.wez.wezterm', 'com.mitchellh.ghostty'] }
+```
 
 ### Keys
 

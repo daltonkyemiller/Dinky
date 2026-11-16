@@ -20,7 +20,7 @@ func runApp() -> Int32 {
 
 final class DinkyApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
-    /// Other tiling window managers seen running at the last refresh.
+    /// Other tiling window managers seen running at the last check.
     private var otherTilers: [String] = []
     /// Whether the key bindings' event tap exists. Creating it can fail right after Accessibility is granted.
     private var hotkeysActive = true
@@ -63,22 +63,28 @@ final class DinkyApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         AppState.shared.numbers.start()
         AppState.shared.numbers.observe { [weak self] _ in self?.refresh() }
         AppState.shared.displays.observe { [weak self] _ in self?.refresh() }
-        // Nothing publishes the enabled state, the config error or other tilers starting and quitting.
+        // Nothing publishes the enabled state, the config error or other tilers starting and quitting. Listing
+        // every process costs more than the rest of a refresh together, so tilers are looked for less often.
         Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in self?.refresh() }
+        Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in self?.checkOtherTilers() }
+        checkOtherTilers()
         refresh()
         print("app: status item up, listening on \(socketPath)")
         print("STATUS:READY")  // fut's run extension watches for this line
         fflush(stdout)
     }
 
+    /// The next refresh shows the result.
+    private func checkOtherTilers() {
+        let tilers = runningOtherTilers()
+        guard tilers != otherTilers else { return }
+        otherTilers = tilers
+        if !tilers.isEmpty { print("app: \(otherTilersWarning(tilers))") }
+    }
+
     private func refresh() {
         let state = AppState.shared
         let workspace = state.displays.focusedDisplay().flatMap(state.numbers.current(on:))
-        let tilers = runningOtherTilers()
-        if tilers != otherTilers {
-            otherTilers = tilers
-            if !tilers.isEmpty { print("app: \(otherTilersWarning(tilers))") }
-        }
         // Tries again on every refresh until the tap exists; once it does, this returns at once.
         let keys = state.hotkeys.start()
         if keys != hotkeysActive {
@@ -86,8 +92,12 @@ final class DinkyApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
             print(keys ? "app: key bindings on" : "app: key bindings off, could not create the keyboard event tap (Accessibility?)")
         }
         let trouble = state.configError != nil || !otherTilers.isEmpty || !hotkeysActive
-        statusItem.button?.title = (workspace.map { "\($0)" } ?? "?") + (trouble ? "!" : "")
-        statusItem.button?.appearsDisabled = !state.enabled
+        guard let button = statusItem.button else { return }
+        let title = (workspace.map { "\($0)" } ?? "?") + (trouble ? "!" : "")
+        let disabled = !state.enabled
+        // Only on change: every set redraws the status item, which kept dinky and WindowServer busy while idle.
+        if button.title != title { button.title = title }
+        if button.appearsDisabled != disabled { button.appearsDisabled = disabled }
     }
 
     /// The focused mode's bindings while the menu is built, so each item shows its key.

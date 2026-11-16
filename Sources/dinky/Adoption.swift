@@ -40,7 +40,7 @@ extension Coordinator {
             }
             fflush(stdout)
             // Re-reads its Space and tracks it there, or where it was if the move failed.
-            windowMoved(window.id, refocus: false)
+            windowMoved(window.id)
             if error == nil { focus(window.id) }
         }
         return true

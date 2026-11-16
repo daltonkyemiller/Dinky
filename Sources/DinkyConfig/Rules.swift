@@ -57,9 +57,36 @@ public enum WindowKind: String, CaseIterable {
     case normal, dialog, sheet, panel
 }
 
-/// `[mode.<name>]`: key combos mapped to the commands they run, in order.
+/// What a key combo does: the commands it runs, in order, in every app but the excluded ones.
+public struct KeyBinding: Equatable {
+    public var commands: [String]
+    /// Bundle IDs whose windows get the key instead: in them dinky leaves the combo alone.
+    public var excludeApps: [String] = []
+
+    public init(_ commands: [String], excludeApps: [String] = []) {
+        self.commands = commands
+        self.excludeApps = excludeApps
+    }
+
+    /// The table form, `{ command = ..., exclude-apps = [...] }`.
+    init(_ t: Table) throws {
+        guard let commands = try t.commands("command") else {
+            throw ConfigError(path: t.path("command"), "missing, a binding table needs 'command'")
+        }
+        self.init(commands, excludeApps: try t.strings("exclude-apps") ?? [])
+        try t.done()
+    }
+
+    /// Whether the combo is dinky's while this app is frontmost.
+    public func applies(to bundleID: String?) -> Bool {
+        !(bundleID.map(excludeApps.contains) ?? false)
+    }
+}
+
+/// `[mode.<name>]`: key combos mapped to their bindings. A binding is a command string, a list of
+/// them, or a table with `command` and `exclude-apps`.
 public struct Mode: Equatable {
-    public var bindings: [KeyCombo: [String]] = [:]
+    public var bindings: [KeyCombo: KeyBinding] = [:]
 
     public init() {}
 
@@ -74,7 +101,7 @@ public struct Mode: Equatable {
             if bindings[combo] != nil {
                 throw ConfigError(path: t.path(key), "'\(combo)' is bound twice")
             }
-            bindings[combo] = try t.commands(key)
+            bindings[combo] = try t.isTable(key) ? KeyBinding(try t.table(key)!) : KeyBinding(try t.commands(key)!)
         }
         try t.done()
     }
